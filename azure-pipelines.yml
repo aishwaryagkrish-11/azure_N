@@ -1,0 +1,52 @@
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: Azure-Common
+
+stages:
+- stage: Build
+  jobs:
+  - job: BuildJob
+    steps:
+    - task: TerraformInstaller@0
+      inputs:
+        terraformVersion: 'latest'
+    
+    - task: TerraformTaskV3@3
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)'
+        backendServiceArm: '$(AZURE_SERVICE_CONNECTION)'
+        backendAzureRmResourceGroupName: '$(RESOURCE_GROUP_NAME)'
+        backendAzureRmStorageAccountName: '$(STORAGE_ACCOUNT_NAME)'
+        backendAzureRmContainerName: '$(CONTAINER_NAME)'
+        backendAzureRmKey: 'terraform.tfstate'
+
+    - task: TerraformTaskV3@3
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)'
+        environmentServiceNameAzureRM: '$(AZURE_SERVICE_CONNECTION)'
+
+- stage: Deploy
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: DeployInfra
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: TerraformTaskV3@3
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: '$(System.DefaultWorkingDirectory)'
+              environmentServiceNameAzureRM: '$(AZURE_SERVICE_CONNECTION)'
